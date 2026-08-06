@@ -6,13 +6,11 @@ import { Send } from 'lucide-react';
 interface ChatConsoleProps {
   onCastSpell: (rawText: string, spellId: SpellId) => void;
   disabled: boolean;
-  cooldowns: Record<SpellId, number>;
 }
 
 export const ChatConsole: React.FC<ChatConsoleProps> = ({
   onCastSpell,
-  disabled,
-  cooldowns
+  disabled
 }) => {
   const [typedText, setTypedText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -45,11 +43,6 @@ export const ChatConsole: React.FC<ChatConsoleProps> = ({
       onCastSpell(typedText, 'FIREBALL');
       setTypedText('');
     }
-  };
-
-  const handleQuickInsert = (text: string) => {
-    setTypedText(text);
-    inputRef.current?.focus();
   };
 
   return (
@@ -126,32 +119,6 @@ export const ChatConsole: React.FC<ChatConsoleProps> = ({
           <span>Lanzar</span>
         </button>
       </form>
-
-      {/* Quick Spell Buttons Bar */}
-      <div className="flex flex-wrap gap-2 pt-1 border-t border-slate-800/80">
-        <span className="text-xs text-slate-400 font-semibold self-center mr-1">Tipear Rápido:</span>
-        {Object.values(SPELLS).map((spell) => {
-          const now = Date.now();
-          const cdTime = cooldowns[spell.id] || 0;
-          const isOnCd = cdTime > now;
-          const remainingSec = isOnCd ? ((cdTime - now) / 1000).toFixed(1) : null;
-
-          return (
-            <div key={spell.id} className="relative group">
-              <button
-                type="button"
-                onClick={() => handleQuickInsert(spell.incantation)}
-                disabled={disabled || isOnCd}
-                className="bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 text-slate-200 transition-all disabled:opacity-40"
-              >
-                <span>{spell.icon}</span>
-                <span className="font-mono font-semibold">{spell.incantation}</span>
-                {isOnCd && <span className="text-amber-400 font-bold ml-1">{remainingSec}s</span>}
-              </button>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 };

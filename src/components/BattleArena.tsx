@@ -115,7 +115,6 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           <ChatConsole
             onCastSpell={onCastSpell}
             disabled={isFinished}
-            cooldowns={selfPlayer.cooldowns}
           />
           <Spellbook />
         </div>
