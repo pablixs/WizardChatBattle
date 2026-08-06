@@ -15,13 +15,8 @@ class SocketService {
   private pendingPackets: ClientPacket[] = [];
 
   constructor() {
-    // Generate persistent client ID per browser session/tab
-    let storedId = sessionStorage.getItem('chatbattle_player_id');
-    if (!storedId) {
-      storedId = 'player_' + Math.random().toString(36).substring(2, 9);
-      sessionStorage.setItem('chatbattle_player_id', storedId);
-    }
-    this.playerId = storedId;
+    // Generate 100% unique client ID per tab instance (never copy from sessionStorage)
+    this.playerId = 'player_' + Math.random().toString(36).substring(2, 9) + '_' + Math.floor(Math.random() * 1000);
   }
 
   getPlayerId(): string {
@@ -60,7 +55,6 @@ class SocketService {
 
       this.socket.addEventListener('open', () => {
         console.log(`⚡ Conectado a Cloudflare Durable Object: ${this.currentRoomCode}`);
-        // Flush any queued packets (e.g. JOIN_ROOM)
         while (this.pendingPackets.length > 0) {
           const packet = this.pendingPackets.shift();
           if (packet && this.socket && this.socket.readyState === WebSocket.OPEN) {
@@ -87,14 +81,13 @@ class SocketService {
 
   /**
    * Authoritative local tab-to-tab room synchronization across browser tabs
-   * Uses localStorage for persistent shared room state + BroadcastChannel for real-time state broadcasts.
    */
   private initLocalMode(roomCode: string) {
     this.isLocalMode = true;
     const channelName = `chatbattle_channel_${roomCode}`;
     this.localChannel = new BroadcastChannel(channelName);
 
-    // Synchronize messages received from other tabs
+    // Listen to broadcasts from other tabs
     this.localChannel.onmessage = (event) => {
       try {
         const packet: ServerPacket = JSON.parse(event.data);
@@ -102,20 +95,29 @@ class SocketService {
       } catch (e) {}
     };
 
-    // Load existing state from localStorage if present
+    // Inspect existing localStorage state
     const storageKey = `chatbattle_state_${roomCode}`;
     const rawState = localStorage.getItem(storageKey);
     if (rawState) {
       try {
         const state: GameState = JSON.parse(rawState);
-        // Immediately notify current tab
-        setTimeout(() => {
-          this.notifyListeners({ type: 'ROOM_STATE', state, yourPlayerId: this.playerId });
-        }, 50);
-      } catch (e) {}
+        // If room is stale (older than 60s or finished), clear it on new join
+        const now = Date.now();
+        const lastLogTime = state.logs[0]?.timestamp || 0;
+        if (state.status === 'FINISHED' || (lastLogTime > 0 && now - lastLogTime > 60000)) {
+          localStorage.removeItem(storageKey);
+        } else {
+          // Send current state immediately
+          setTimeout(() => {
+            this.notifyListeners({ type: 'ROOM_STATE', state, yourPlayerId: this.playerId });
+          }, 10);
+        }
+      } catch (e) {
+        localStorage.removeItem(storageKey);
+      }
     }
 
-    console.log(`🏠 Modo Local Tab-to-Tab activo en el canal: ${channelName}`);
+    console.log(`🏠 Modo Local Tab-to-Tab activo en el canal: ${channelName} [ID: ${this.playerId}]`);
   }
 
   send(packet: ClientPacket) {
@@ -125,20 +127,18 @@ class SocketService {
       if (this.socket && this.socket.readyState === WebSocket.OPEN) {
         this.socket.send(JSON.stringify(packet));
       } else {
-        // Buffer packet until socket finishes opening
         this.pendingPackets.push(packet);
       }
     }
   }
 
   /**
-   * Executes packet on local GolfRoom authoritative state & syncs across tabs via BroadcastChannel + localStorage
+   * Executes packet on local GolfRoom authoritative state & syncs across tabs
    */
   private processLocalPacket(packet: ClientPacket) {
     const roomCode = this.currentRoomCode;
     const storageKey = `chatbattle_state_${roomCode}`;
 
-    // Create a mock room context for GolfRoom
     let currentSavedState: GameState | null = null;
     const rawSaved = localStorage.getItem(storageKey);
     if (rawSaved) {
@@ -152,17 +152,14 @@ class SocketService {
       broadcast: (msg: string) => {
         try {
           const p: ServerPacket = JSON.parse(msg);
-          // Persist state if ROOM_STATE or SPELL_CAST_RESULT
-          if (p.type === 'ROOM_STATE') {
-            localStorage.setItem(storageKey, JSON.stringify(p.state));
-          } else if (p.type === 'SPELL_CAST_RESULT') {
+          if (p.type === 'ROOM_STATE' || p.type === 'SPELL_CAST_RESULT') {
             localStorage.setItem(storageKey, JSON.stringify(p.state));
           }
-          // Broadcast to all other tabs
+          // Broadcast to all other tabs via BroadcastChannel
           if (this.localChannel) {
             this.localChannel.postMessage(msg);
           }
-          // Broadcast to local tab listeners
+          // Notify local tab listeners immediately
           this.notifyListeners(p);
         } catch (e) {}
       }
@@ -173,7 +170,7 @@ class SocketService {
       golfRoom.state = currentSavedState;
     }
 
-    // Mock sender connection
+    // Mock sender connection with unique player ID
     const senderConn = {
       id: this.playerId,
       send: (msg: string) => {

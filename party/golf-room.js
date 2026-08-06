@@ -20,7 +20,6 @@ export default class GolfRoom {
   }
 
   onConnect(conn, ctx) {
-    // Send current initial room state to newly connected client
     conn.send(JSON.stringify({
       type: 'ROOM_STATE',
       state: this.state,
@@ -79,7 +78,6 @@ export default class GolfRoom {
     this.state.status = 'LOBBY';
     this.state.winnerId = null;
 
-    // Promote remaining player to host if necessary
     const remainingIds = Object.keys(this.state.players);
     if (remainingIds.length > 0) {
       this.state.players[remainingIds[0]].isHost = true;
@@ -107,13 +105,23 @@ export default class GolfRoom {
     this.state.roomCode = roomCode || this.room.id;
     const playerIds = Object.keys(this.state.players);
 
+    // If room is finished, clear players for new game
+    if (this.state.status === 'FINISHED') {
+      this.state.players = {};
+      this.state.status = 'LOBBY';
+      this.state.winnerId = null;
+      this.state.logs = [];
+    }
+
+    const currentPlayers = Object.keys(this.state.players);
+
     // Maximum 2 players in PvP room
-    if (playerIds.length >= 2 && !this.state.players[conn.id]) {
+    if (currentPlayers.length >= 2 && !this.state.players[conn.id]) {
       conn.send(JSON.stringify({ type: 'ERROR', message: 'La sala ya está llena (2/2 jugadores)' }));
       return;
     }
 
-    const isHost = playerIds.length === 0;
+    const isHost = currentPlayers.length === 0;
 
     this.state.players[conn.id] = {
       id: conn.id,
@@ -172,13 +180,6 @@ export default class GolfRoom {
     if (!caster) return;
 
     const now = Date.now();
-
-    // Check freeze status effect
-    if (caster.statusEffects.frozenUntil > now) {
-      sender.send(JSON.stringify({ type: 'ERROR', message: '¡Estás congelado! Espera a descongelarte.' }));
-      return;
-    }
-
     const spell = SPELLS[spellId];
     if (!spell) return;
 
@@ -207,7 +208,6 @@ export default class GolfRoom {
         resultType = 'SUPER_CAST';
         logMsg = `¡PODER MAYÚSCULA! ${caster.name} desata ${spell.name} con +50% de daño extra.`;
       } else {
-        // No charges left -> penalty
         finalDamage = Math.round(finalDamage * 0.5);
         resultType = 'WEAK';
         logMsg = `${caster.name} intentó un hechizo MAYÚSCULA sin cargas acumuladas (efecto reducido).`;
@@ -222,7 +222,6 @@ export default class GolfRoom {
         resultType = 'CRIT';
         logMsg = `🎲 ¡CAOS TOTAL! ${caster.name} tipea alternando y logra CRÍTICO x2.`;
       } else {
-        // Recoil self-damage
         const recoil = 12;
         caster.hp = Math.max(0, caster.hp - recoil);
         resultType = 'RECOIL';
@@ -250,7 +249,6 @@ export default class GolfRoom {
 
     // Apply Damage / Effects to Opponent
     if (opponent && finalDamage > 0) {
-      // Check opponent shield
       if (opponent.shield > 0) {
         if (opponent.shield >= finalDamage) {
           opponent.shield -= finalDamage;
@@ -265,10 +263,10 @@ export default class GolfRoom {
         opponent.hp = Math.max(0, opponent.hp - finalDamage);
       }
 
-      // Freeze status
+      // Freeze status effect timer (for screen visual overlay duration = 2.5s)
       if (spell.id === 'FREEZE' && resultType !== 'FIZZLE') {
-        opponent.statusEffects.frozenUntil = now + 1500;
-        logMsg += ` ¡${opponent.name} ha sido congelado por 1.5s!`;
+        opponent.statusEffects.frozenUntil = now + 2500;
+        logMsg += ` ¡${opponent.name} ha recibido un congelamiento visual!`;
       }
 
       // Dispel
@@ -334,7 +332,6 @@ export default class GolfRoom {
       return;
     }
 
-    // Reset HP & status for new game
     Object.values(this.state.players).forEach(p => {
       p.hp = 100;
       p.shield = 0;

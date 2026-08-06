@@ -116,7 +116,6 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
             onCastSpell={onCastSpell}
             disabled={isFinished}
             cooldowns={selfPlayer.cooldowns}
-            isFrozen={isSelfFrozen}
           />
           <Spellbook />
         </div>

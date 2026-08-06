@@ -7,24 +7,22 @@ interface ChatConsoleProps {
   onCastSpell: (rawText: string, spellId: SpellId) => void;
   disabled: boolean;
   cooldowns: Record<SpellId, number>;
-  isFrozen: boolean;
 }
 
 export const ChatConsole: React.FC<ChatConsoleProps> = ({
   onCastSpell,
   disabled,
-  cooldowns,
-  isFrozen
+  cooldowns
 }) => {
   const [typedText, setTypedText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Focus input automatically
   useEffect(() => {
-    if (!disabled && !isFrozen) {
+    if (!disabled) {
       inputRef.current?.focus();
     }
-  }, [disabled, isFrozen]);
+  }, [disabled]);
 
   // Find matching spell based on input text
   const trimmed = typedText.trim();
@@ -38,13 +36,12 @@ export const ChatConsole: React.FC<ChatConsoleProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!trimmed || disabled || isFrozen) return;
+    if (!trimmed || disabled) return;
 
     if (matchedSpell) {
       onCastSpell(typedText, matchedSpell.id);
       setTypedText('');
     } else {
-      // Default to FIREBALL or notify error
       onCastSpell(typedText, 'FIREBALL');
       setTypedText('');
     }
@@ -56,7 +53,7 @@ export const ChatConsole: React.FC<ChatConsoleProps> = ({
   };
 
   return (
-    <div className="w-full glass-card p-4 rounded-2xl border border-slate-800 space-y-3">
+    <div className="w-full glass-card p-4 rounded-2xl border border-slate-800 space-y-3 relative">
       {/* Live Typing Analysis Badge Indicator */}
       <div className="flex items-center justify-between min-h-[32px] px-2">
         <div className="flex items-center gap-2">
@@ -102,16 +99,10 @@ export const ChatConsole: React.FC<ChatConsoleProps> = ({
             type="text"
             value={typedText}
             onChange={(e) => setTypedText(e.target.value)}
-            disabled={disabled || isFrozen}
-            placeholder={
-              isFrozen
-                ? '❄️ ¡CONGELADO! No puedes tipear...'
-                : 'Tipea tu hechizo (ej: FIREBALL, fireball, fIrEbAlL, frbl)...'
-            }
+            disabled={disabled}
+            placeholder="Tipea tu hechizo (ej: FIREBALL, fireball, fIrEbAlL, frbl)..."
             className={`w-full bg-slate-950/90 border-2 text-white font-mono text-base px-4 py-3.5 rounded-xl outline-none transition-all placeholder:text-slate-600 ${
-              isFrozen
-                ? 'border-cyan-500/80 bg-cyan-950/30 cursor-not-allowed text-cyan-200'
-                : modifierInfo?.caseType === 'UPPERCASE'
+              modifierInfo?.caseType === 'UPPERCASE'
                 ? 'border-amber-400 shadow-md shadow-amber-500/20 tracking-wider font-extrabold text-amber-200'
                 : modifierInfo?.caseType === 'ALTERNATING'
                 ? 'border-purple-400 text-purple-200 font-bold'
@@ -128,7 +119,7 @@ export const ChatConsole: React.FC<ChatConsoleProps> = ({
         {/* Submit Button */}
         <button
           type="submit"
-          disabled={disabled || isFrozen || !trimmed}
+          disabled={disabled || !trimmed}
           className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold px-6 py-3.5 rounded-xl shadow-lg shadow-cyan-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2 border border-cyan-400/30 shrink-0 active:scale-95"
         >
           <Send className="w-5 h-5" />
@@ -150,7 +141,7 @@ export const ChatConsole: React.FC<ChatConsoleProps> = ({
               <button
                 type="button"
                 onClick={() => handleQuickInsert(spell.incantation)}
-                disabled={disabled || isFrozen || isOnCd}
+                disabled={disabled || isOnCd}
                 className="bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 text-slate-200 transition-all disabled:opacity-40"
               >
                 <span>{spell.icon}</span>
