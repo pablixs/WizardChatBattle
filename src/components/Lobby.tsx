@@ -23,7 +23,7 @@ export const Lobby: React.FC<LobbyProps> = ({
   const [nameInput, setNameInput] = useState('Archimago');
   const [selectedAvatar, setSelectedAvatar] = useState('🧙‍♂️');
   const [useLocalFallback, setUseLocalFallback] = useState(true);
-  const [customHost, setCustomHost] = useState('golf-js-party.golfjstp.workers.dev');
+  const [customHost, setCustomHost] = useState(import.meta.env.VITE_PARTY_HOST || 'golf-js-party.golfjstp.workers.dev');
   const [copiedCode, setCopiedCode] = useState(false);
 
   const isJoined = gameState !== null && gameState.players[currentPlayerId];

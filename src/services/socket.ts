@@ -35,7 +35,7 @@ class SocketService {
     }
 
     // PartySocket Cloudflare Durable Object endpoint
-    const host = serverUrl || 'golf-js-party.golfjstp.workers.dev';
+    const host = serverUrl || import.meta.env.VITE_PARTY_HOST || 'golf-js-party.golfjstp.workers.dev';
 
     try {
       this.socket = new PartySocket({
