@@ -53,7 +53,8 @@ export function App() {
       type: 'JOIN_ROOM',
       roomCode,
       playerName: name,
-      avatar
+      avatar,
+      playerId: currentPlayerId
     });
   };
 

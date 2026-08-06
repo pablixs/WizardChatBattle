@@ -60,7 +60,7 @@ export interface BattleLogEntry {
 
 // WebSocket Message Packets (PartySocket format)
 export type ClientPacket =
-  | { type: 'JOIN_ROOM'; roomCode: string; playerName: string; avatar: string }
+  | { type: 'JOIN_ROOM'; roomCode: string; playerName: string; avatar: string; playerId?: string }
   | { type: 'START_MATCH' }
   | { type: 'CAST_SPELL'; rawText: string; spellId: SpellId }
   | { type: 'REMATCH' }

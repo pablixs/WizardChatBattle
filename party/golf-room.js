@@ -154,8 +154,9 @@ export class GolfRoom {
     this.broadcastState();
   }
 
-  handleJoinRoom(conn, { roomCode, playerName, avatar }) {
-    const senderId = conn.connId || conn.id;
+  handleJoinRoom(conn, { roomCode, playerName, avatar, playerId }) {
+    const senderId = playerId || conn.connId || conn.id;
+    conn.connId = senderId;
     this.roomState.roomCode = roomCode || this.roomState.roomCode || 'DEFAULT';
 
     if (this.roomState.status === 'FINISHED') {
