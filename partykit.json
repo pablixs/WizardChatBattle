@@ -1,0 +1,5 @@
+{
+  "name": "chatbattle-party",
+  "main": "party/golf-room.js",
+  "compatibilityDate": "2026-08-06"
+}
