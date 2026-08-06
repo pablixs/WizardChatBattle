@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "golf-js-party",
+  "main": "party/golf-room.js",
+  "compatibility_date": "2026-08-06",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "GOLF_ROOM",
+        "class_name": "GolfRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": ["GolfRoom"]
+    }
+  ]
+}

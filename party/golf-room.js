@@ -1,15 +1,18 @@
 // @ts-nocheck
 /**
- * Cloudflare Worker / PartyKit Durable Object for ChatBattle
- * Located at party/golf-room.js in golfjstp.workers.dev
+ * Cloudflare Worker & Durable Object for ChatBattle (golf-js-party)
  */
 
 import { SPELLS, analyzeTypingModifier } from '../src/config/spells.js';
 
-export default class GolfRoom {
-  constructor(room) {
-    this.room = room;
-    this.state = {
+export class GolfRoom {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+    this.sessions = new Map(); // socket -> connection metadata
+
+    // Active room state
+    this.roomState = {
       roomCode: '',
       status: 'LOBBY',
       players: {},
@@ -17,23 +20,70 @@ export default class GolfRoom {
       logs: [],
       startTime: null
     };
+
+    // For local mock compatibility
+    if (state && state.id) {
+      this.roomState.roomCode = state.id;
+      this.room = state;
+    }
   }
 
-  onConnect(conn, ctx) {
-    conn.send(JSON.stringify({
+  // Cloudflare WebSocket upgrade handler
+  async fetch(request) {
+    const url = new URL(request.url);
+    const parts = url.pathname.split('/').filter(Boolean);
+    const roomCode = (parts[parts.length - 1] || 'DEFAULT').toUpperCase();
+    this.roomState.roomCode = roomCode;
+
+    const webSocketPair = new WebSocketPair();
+    const [client, server] = Object.values(webSocketPair);
+
+    server.accept();
+
+    // Assign unique session ID to connection
+    const connId = 'player_' + Math.random().toString(36).substring(2, 9);
+    server.connId = connId;
+    this.sessions.set(server, { id: connId });
+
+    server.addEventListener('message', (event) => {
+      this.onMessage(event.data, server);
+    });
+
+    server.addEventListener('close', () => {
+      this.onClose(server);
+      this.sessions.delete(server);
+    });
+
+    // Send initial room state to newly connected client
+    server.send(JSON.stringify({
       type: 'ROOM_STATE',
-      state: this.state,
-      yourPlayerId: conn.id
+      state: this.roomState,
+      yourPlayerId: connId
     }));
+
+    return new Response(null, { status: 101, webSocket: client });
   }
 
-  onRequest(req) {
-    return new Response("ChatBattle GolfRoom Durable Object active");
+  // Getter for room state compatibility
+  get stateData() {
+    return this.roomState;
+  }
+  set stateData(val) {
+    this.roomState = val;
+  }
+
+  // Backward compatibility alias
+  get state() {
+    return this.roomState;
+  }
+  set state(val) {
+    this.roomState = val;
   }
 
   onMessage(messageString, sender) {
     try {
       const data = JSON.parse(messageString);
+      const senderId = sender.connId || sender.id;
 
       switch (data.type) {
         case 'JOIN_ROOM':
@@ -57,31 +107,34 @@ export default class GolfRoom {
           break;
       }
     } catch (err) {
-      sender.send(JSON.stringify({ type: 'ERROR', message: 'Formato de mensaje inválido' }));
+      if (sender && typeof sender.send === 'function') {
+        sender.send(JSON.stringify({ type: 'ERROR', message: 'Formato de mensaje inválido' }));
+      }
     }
   }
 
-  onClose(conn) {
-    if (this.state.players[conn.id]) {
-      this.handleLeaveRoom(conn);
+  onClose(sender) {
+    const senderId = sender.connId || sender.id;
+    if (senderId && this.roomState.players[senderId]) {
+      this.handleLeaveRoom(sender);
     }
   }
 
   handleLeaveRoom(sender) {
-    const leavingPlayer = this.state.players[sender.id];
+    const senderId = sender.connId || sender.id;
+    const leavingPlayer = this.roomState.players[senderId];
     if (!leavingPlayer) return;
 
     const name = leavingPlayer.name;
-    delete this.state.players[sender.id];
+    delete this.roomState.players[senderId];
 
-    // Reset room state to LOBBY if someone leaves
-    this.state.status = 'LOBBY';
-    this.state.winnerId = null;
+    this.roomState.status = 'LOBBY';
+    this.roomState.winnerId = null;
 
-    const remainingIds = Object.keys(this.state.players);
+    const remainingIds = Object.keys(this.roomState.players);
     if (remainingIds.length > 0) {
-      this.state.players[remainingIds[0]].isHost = true;
-      this.state.logs = [{
+      this.roomState.players[remainingIds[0]].isHost = true;
+      this.roomState.logs = [{
         id: Math.random().toString(),
         timestamp: Date.now(),
         casterId: 'SYSTEM',
@@ -95,36 +148,36 @@ export default class GolfRoom {
         message: `⚠️ ${name} ha abandonado la sala. La partida ha finalizado.`
       }];
     } else {
-      this.state.logs = [];
+      this.roomState.logs = [];
     }
 
     this.broadcastState();
   }
 
   handleJoinRoom(conn, { roomCode, playerName, avatar }) {
-    this.state.roomCode = roomCode || this.room.id;
-    const playerIds = Object.keys(this.state.players);
+    const senderId = conn.connId || conn.id;
+    this.roomState.roomCode = roomCode || this.roomState.roomCode || 'DEFAULT';
 
-    // If room is finished, clear players for new game
-    if (this.state.status === 'FINISHED') {
-      this.state.players = {};
-      this.state.status = 'LOBBY';
-      this.state.winnerId = null;
-      this.state.logs = [];
+    if (this.roomState.status === 'FINISHED') {
+      this.roomState.players = {};
+      this.roomState.status = 'LOBBY';
+      this.roomState.winnerId = null;
+      this.roomState.logs = [];
     }
 
-    const currentPlayers = Object.keys(this.state.players);
+    const currentPlayers = Object.keys(this.roomState.players);
 
-    // Maximum 2 players in PvP room
-    if (currentPlayers.length >= 2 && !this.state.players[conn.id]) {
-      conn.send(JSON.stringify({ type: 'ERROR', message: 'La sala ya está llena (2/2 jugadores)' }));
+    if (currentPlayers.length >= 2 && !this.roomState.players[senderId]) {
+      if (typeof conn.send === 'function') {
+        conn.send(JSON.stringify({ type: 'ERROR', message: 'La sala ya está llena (2/2 jugadores)' }));
+      }
       return;
     }
 
     const isHost = currentPlayers.length === 0;
 
-    this.state.players[conn.id] = {
-      id: conn.id,
+    this.roomState.players[senderId] = {
+      id: senderId,
       name: playerName || (isHost ? 'Mago Líder' : 'Desafiante'),
       avatar: avatar || (isHost ? '🧙‍♂️' : '🧙‍♀️'),
       isHost,
@@ -137,26 +190,29 @@ export default class GolfRoom {
       cooldowns: { FIREBALL: 0, LIGHTNING: 0, HEAL: 0, FREEZE: 0, PROTEGO: 0, METEOR: 0, DISPEL: 0 }
     };
 
-    if (Object.keys(this.state.players).length === 2 && this.state.status === 'LOBBY') {
-      this.state.status = 'READY';
+    if (Object.keys(this.roomState.players).length === 2 && this.roomState.status === 'LOBBY') {
+      this.roomState.status = 'READY';
     }
 
     this.broadcastState();
   }
 
   handleStartMatch(sender) {
-    const player = this.state.players[sender.id];
+    const senderId = sender.connId || sender.id;
+    const player = this.roomState.players[senderId];
     if (!player || !player.isHost) return;
 
-    if (Object.keys(this.state.players).length < 2) {
-      sender.send(JSON.stringify({ type: 'ERROR', message: 'Se necesitan 2 jugadores para iniciar.' }));
+    if (Object.keys(this.roomState.players).length < 2) {
+      if (typeof sender.send === 'function') {
+        sender.send(JSON.stringify({ type: 'ERROR', message: 'Se necesitan 2 jugadores para iniciar.' }));
+      }
       return;
     }
 
-    this.state.status = 'PLAYING';
-    this.state.winnerId = null;
-    this.state.startTime = Date.now();
-    this.state.logs = [{
+    this.roomState.status = 'PLAYING';
+    this.roomState.winnerId = null;
+    this.roomState.startTime = Date.now();
+    this.roomState.logs = [{
       id: Math.random().toString(),
       timestamp: Date.now(),
       casterId: 'SYSTEM',
@@ -174,34 +230,33 @@ export default class GolfRoom {
   }
 
   handleCastSpell(sender, { rawText, spellId }) {
-    if (this.state.status !== 'PLAYING') return;
+    if (this.roomState.status !== 'PLAYING') return;
 
-    const caster = this.state.players[sender.id];
+    const senderId = sender.connId || sender.id;
+    const caster = this.roomState.players[senderId];
     if (!caster) return;
 
     const now = Date.now();
     const spell = SPELLS[spellId];
     if (!spell) return;
 
-    // Check Cooldown
     if (caster.cooldowns[spellId] > now) {
       const waitSec = ((caster.cooldowns[spellId] - now) / 1000).toFixed(1);
-      sender.send(JSON.stringify({ type: 'ERROR', message: `Hechizo en recarga (${waitSec}s)` }));
+      if (typeof sender.send === 'function') {
+        sender.send(JSON.stringify({ type: 'ERROR', message: `Hechizo en recarga (${waitSec}s)` }));
+      }
       return;
     }
 
-    // Identify Opponent
-    const opponentId = Object.keys(this.state.players).find(id => id !== sender.id);
-    const opponent = opponentId ? this.state.players[opponentId] : null;
+    const opponentId = Object.keys(this.roomState.players).find(id => id !== senderId);
+    const opponent = opponentId ? this.roomState.players[opponentId] : null;
 
-    // Analyze typing modifier (UPPERCASE, LOWERCASE, ALTERNATING, SHORTENED)
     const analysis = analyzeTypingModifier(rawText, spell);
     let finalDamage = Math.round(spell.baseDamage * analysis.modifierMultiplier);
     let finalHeal = Math.round(spell.baseHeal * analysis.modifierMultiplier);
     let resultType = 'NORMAL';
     let logMsg = '';
 
-    // Handle CAPS OVERLOAD check
     if (analysis.caseType === 'UPPERCASE') {
       if (caster.capsCharges > 0) {
         caster.capsCharges -= 1;
@@ -242,12 +297,10 @@ export default class GolfRoom {
       }
     }
 
-    // Set cooldown duration
     let cdDuration = spell.cooldownMs;
     if (analysis.caseType === 'LOWERCASE') cdDuration = Math.round(cdDuration * 0.8);
     caster.cooldowns[spellId] = now + cdDuration;
 
-    // Apply Damage / Effects to Opponent
     if (opponent && finalDamage > 0) {
       if (opponent.shield > 0) {
         if (opponent.shield >= finalDamage) {
@@ -263,19 +316,16 @@ export default class GolfRoom {
         opponent.hp = Math.max(0, opponent.hp - finalDamage);
       }
 
-      // Freeze status effect timer (for screen visual overlay duration = 2.5s)
       if (spell.id === 'FREEZE' && resultType !== 'FIZZLE') {
         opponent.statusEffects.frozenUntil = now + 2500;
         logMsg += ` ¡${opponent.name} ha recibido un congelamiento visual!`;
       }
 
-      // Dispel
       if (spell.id === 'DISPEL') {
         opponent.shield = 0;
       }
     }
 
-    // Apply Healing & Shields to Self
     if (finalHeal > 0) {
       caster.hp = Math.min(caster.maxHp, caster.hp + finalHeal);
     }
@@ -284,7 +334,6 @@ export default class GolfRoom {
       logMsg = `${caster.name} levanta un Escudo Protego (+30 absorción).`;
     }
 
-    // Log entry
     const entry = {
       id: Math.random().toString(),
       timestamp: now,
@@ -299,14 +348,13 @@ export default class GolfRoom {
       message: logMsg
     };
 
-    this.state.logs.unshift(entry);
-    if (this.state.logs.length > 35) this.state.logs.pop();
+    this.roomState.logs.unshift(entry);
+    if (this.roomState.logs.length > 35) this.roomState.logs.pop();
 
-    // Check Win Condition
     if (opponent && opponent.hp <= 0) {
-      this.state.status = 'FINISHED';
-      this.state.winnerId = caster.id;
-      this.state.logs.unshift({
+      this.roomState.status = 'FINISHED';
+      this.roomState.winnerId = caster.id;
+      this.roomState.logs.unshift({
         id: Math.random().toString(),
         timestamp: now,
         casterId: 'SYSTEM',
@@ -325,24 +373,26 @@ export default class GolfRoom {
   }
 
   handleRematch(sender) {
-    if (Object.keys(this.state.players).length < 2) {
-      sender.send(JSON.stringify({ type: 'ERROR', message: 'No se puede iniciar la revancha porque el oponente abandonó la sala.' }));
-      this.state.status = 'LOBBY';
+    if (Object.keys(this.roomState.players).length < 2) {
+      if (typeof sender.send === 'function') {
+        sender.send(JSON.stringify({ type: 'ERROR', message: 'No se puede iniciar la revancha porque el oponente abandonó la sala.' }));
+      }
+      this.roomState.status = 'LOBBY';
       this.broadcastState();
       return;
     }
 
-    Object.values(this.state.players).forEach(p => {
+    Object.values(this.roomState.players).forEach(p => {
       p.hp = 100;
       p.shield = 0;
       p.capsCharges = 3;
       p.statusEffects = { frozenUntil: 0, poisonedUntil: 0, silencedUntil: 0 };
       p.cooldowns = { FIREBALL: 0, LIGHTNING: 0, HEAL: 0, FREEZE: 0, PROTEGO: 0, METEOR: 0, DISPEL: 0 };
     });
-    this.state.status = 'PLAYING';
-    this.state.winnerId = null;
-    this.state.startTime = Date.now();
-    this.state.logs = [{
+    this.roomState.status = 'PLAYING';
+    this.roomState.winnerId = null;
+    this.roomState.startTime = Date.now();
+    this.roomState.logs = [{
       id: Math.random().toString(),
       timestamp: Date.now(),
       casterId: 'SYSTEM',
@@ -360,9 +410,39 @@ export default class GolfRoom {
   }
 
   broadcastState() {
-    this.room.broadcast(JSON.stringify({
+    const payload = JSON.stringify({
       type: 'ROOM_STATE',
-      state: this.state
-    }));
+      state: this.roomState
+    });
+
+    // Broadcast across Cloudflare Durable Object WebSocket sessions
+    for (const [session] of this.sessions) {
+      try {
+        session.send(payload);
+      } catch (e) {}
+    }
+
+    // Broadcast across local mock room if present
+    if (this.room && typeof this.room.broadcast === 'function') {
+      this.room.broadcast(payload);
+    }
   }
 }
+
+// Cloudflare Worker Default Entry Point (fetch handler)
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const parts = url.pathname.split('/').filter(Boolean);
+    const roomCode = (parts[parts.length - 1] || 'DEFAULT').toUpperCase();
+
+    if (!env.GOLF_ROOM) {
+      return new Response("Configuración Durable Object GOLF_ROOM no encontrada", { status: 500 });
+    }
+
+    const id = env.GOLF_ROOM.idFromName(roomCode);
+    const roomObject = env.GOLF_ROOM.get(id);
+
+    return roomObject.fetch(request);
+  }
+};
