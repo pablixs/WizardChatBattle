@@ -220,105 +220,97 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
         </button>
       </div>
 
-      {/* ═══ BATTLE SCENE ═══ */}
-      <div className="battle-scene flex-1 relative rounded-2xl overflow-hidden border border-slate-800/50 mb-3" style={{ minHeight: '320px' }}>
-        {/* Opponent nameplate — top-right */}
-        {opponentPlayer && (
-          <div className="absolute top-4 right-4 left-1/3 z-10">
+      {/* ═══ TOP ROW: ZONA A + ZONA B ═══ */}
+      <div className="flex gap-3 mb-3" style={{ minHeight: '340px' }}>
+
+        {/* ── ZONA A: Battle Scene (left, ~60%) ── */}
+        <div className="flex-[3] battle-scene relative rounded-2xl overflow-hidden border border-slate-800/50">
+          {/* Opponent nameplate — top-right */}
+          {opponentPlayer && (
+            <div className="absolute top-4 right-4 left-[40%] z-10">
+              <HPNameplate
+                name={opponentPlayer.name}
+                avatar={opponentPlayer.avatar}
+                hp={opponentPlayer.hp}
+                maxHp={opponentPlayer.maxHp}
+                shield={opponentPlayer.shield}
+                capsCharges={opponentPlayer.capsCharges}
+                maxCapsCharges={opponentPlayer.maxCapsCharges}
+                isFrozen={isOpponentFrozen}
+                isRight
+              />
+            </div>
+          )}
+
+          {/* Self nameplate — bottom-left */}
+          <div className="absolute bottom-4 left-4 right-[40%] z-10">
             <HPNameplate
-              name={opponentPlayer.name}
-              avatar={opponentPlayer.avatar}
-              hp={opponentPlayer.hp}
-              maxHp={opponentPlayer.maxHp}
-              shield={opponentPlayer.shield}
-              capsCharges={opponentPlayer.capsCharges}
-              maxCapsCharges={opponentPlayer.maxCapsCharges}
-              isFrozen={isOpponentFrozen}
-              isRight
-            />
-          </div>
-        )}
-
-        {/* Self nameplate — bottom-left */}
-        <div className="absolute bottom-4 left-4 right-1/3 z-10">
-          <HPNameplate
-            name={selfPlayer.name}
-            avatar={selfPlayer.avatar}
-            hp={selfPlayer.hp}
-            maxHp={selfPlayer.maxHp}
-            shield={selfPlayer.shield}
-            capsCharges={selfPlayer.capsCharges}
-            maxCapsCharges={selfPlayer.maxCapsCharges}
-            isFrozen={isSelfFrozen}
-            isCurrentPlayer
-          />
-        </div>
-
-        {/* Battle sprites */}
-        <div className="absolute inset-0 flex items-center justify-between px-8 md:px-16">
-          {/* Self sprite — bottom-left area */}
-          <div className="self-end mb-20 md:mb-24">
-            <BattleSprite
+              name={selfPlayer.name}
               avatar={selfPlayer.avatar}
               hp={selfPlayer.hp}
               maxHp={selfPlayer.maxHp}
+              shield={selfPlayer.shield}
+              capsCharges={selfPlayer.capsCharges}
+              maxCapsCharges={selfPlayer.maxCapsCharges}
               isFrozen={isSelfFrozen}
+              isCurrentPlayer
             />
           </div>
 
-          {/* Opponent sprite — top-right area */}
-          {opponentPlayer ? (
-            <div className="self-start mt-16 md:mt-20">
+          {/* Battle sprites */}
+          <div className="absolute inset-0 flex items-center justify-between px-8 md:px-16">
+            <div className="self-end mb-20 md:mb-24">
               <BattleSprite
-                avatar={opponentPlayer.avatar}
-                isOpponent
-                hp={opponentPlayer.hp}
-                maxHp={opponentPlayer.maxHp}
-                isFrozen={isOpponentFrozen}
+                avatar={selfPlayer.avatar}
+                hp={selfPlayer.hp}
+                maxHp={selfPlayer.maxHp}
+                isFrozen={isSelfFrozen}
               />
             </div>
-          ) : (
-            <div className="self-start mt-16 md:mt-20 text-4xl opacity-30 animate-pulse">❓</div>
-          )}
-        </div>
-      </div>
-
-      {/* ═══ BOTTOM PANEL: Dialogue + Moves ═══ */}
-      <div className="space-y-2">
-        {/* Battle dialogue box (latest action) */}
-        <div className="pokemon-dialog-box">
-          {latestLog ? (
-            <div className="flex items-start gap-2">
-              <span className="text-base">{latestLog.casterId === currentPlayerId ? selfPlayer.avatar : opponentPlayer?.avatar || '🧙'}</span>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="font-bold text-sm text-slate-200">{latestLog.casterName}</span>
-                  <span className="text-cyan-300 text-xs font-semibold">{latestLog.spellName}</span>
-                  {latestLog.resultType === 'CRIT' && (
-                    <span className="text-[10px] font-bold text-purple-300 bg-purple-500/20 border border-purple-400/40 px-1.5 py-0.5 rounded-full">⚡ CRÍTICO</span>
-                  )}
-                  {latestLog.resultType === 'SUPER_CAST' && (
-                    <span className="text-[10px] font-bold text-amber-300 bg-amber-500/20 border border-amber-400/40 px-1.5 py-0.5 rounded-full">🔥 SUPER</span>
-                  )}
-                  {latestLog.resultType === 'FIZZLE' && (
-                    <span className="text-[10px] font-bold text-rose-300 bg-rose-500/20 border border-rose-400/40 px-1.5 py-0.5 rounded-full">💨 FALLÓ</span>
-                  )}
-                  {latestLog.resultType === 'RECOIL' && (
-                    <span className="text-[10px] font-bold text-orange-300 bg-orange-500/20 border border-orange-400/40 px-1.5 py-0.5 rounded-full">💥 RECULAR</span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-400 leading-relaxed">{latestLog.message}</p>
+            {opponentPlayer ? (
+              <div className="self-start mt-16 md:mt-20">
+                <BattleSprite
+                  avatar={opponentPlayer.avatar}
+                  isOpponent
+                  hp={opponentPlayer.hp}
+                  maxHp={opponentPlayer.maxHp}
+                  isFrozen={isOpponentFrozen}
+                />
               </div>
+            ) : (
+              <div className="self-start mt-16 md:mt-20 text-4xl opacity-30 animate-pulse">❓</div>
+            )}
+          </div>
+
+          {/* Dialogue overlay at bottom of battle scene */}
+          <div className="absolute bottom-0 left-0 right-0 z-20">
+            <div className="pokemon-dialog-box !rounded-none !rounded-b-2xl !border-t-2 !border-indigo-500/30 !py-2 !px-4">
+              {latestLog ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">{latestLog.casterId === currentPlayerId ? selfPlayer.avatar : opponentPlayer?.avatar || '🧙'}</span>
+                  <span className="font-bold text-xs text-slate-200">{latestLog.casterName}</span>
+                  <span className="text-indigo-300 text-xs font-semibold">{latestLog.spellName}</span>
+                  {latestLog.resultType === 'CRIT' && <span className="text-[9px] font-bold text-purple-300 bg-purple-500/20 px-1.5 py-0.5 rounded-full">⚡ CRIT</span>}
+                  {latestLog.resultType === 'SUPER_CAST' && <span className="text-[9px] font-bold text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded-full">🔥 SUPER</span>}
+                  {latestLog.resultType === 'FIZZLE' && <span className="text-[9px] font-bold text-rose-300 bg-rose-500/20 px-1.5 py-0.5 rounded-full">💨 FALLÓ</span>}
+                  {latestLog.resultType === 'RECOIL' && <span className="text-[9px] font-bold text-orange-300 bg-orange-500/20 px-1.5 py-0.5 rounded-full">💥 RECULAR</span>}
+                  <span className="text-[10px] text-slate-500 ml-auto truncate max-w-[200px]">{latestLog.message}</span>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 italic text-center">¿Qué hará el mago?</p>
+              )}
             </div>
-          ) : (
-            <p className="text-sm text-slate-500 italic text-center">¿Qué hará el mago?</p>
-          )}
+          </div>
         </div>
 
-        {/* Spell moves grid + typing input */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {/* Left: 2×2+ Move Grid */}
-          <div className="grid grid-cols-2 gap-1.5">
+        {/* ── ZONA B: Spell Moves (right, ~40%) ── */}
+        <div className="flex-[2] glass-card rounded-2xl border border-indigo-500/20 p-3 flex flex-col">
+          <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-800/60">
+            <span className="text-sm">📖</span>
+            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Hechizos</span>
+            <span className="text-[10px] text-slate-500 ml-auto font-mono">Tipear para lanzar</span>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5 flex-1 auto-rows-fr">
             {spellList.map((spell) => {
               const cdTime = selfPlayer.cooldowns[spell.id] || 0;
               const isOnCd = cdTime > now;
@@ -329,22 +321,20 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
                   spell={spell}
                   isOnCd={isOnCd}
                   remainingSec={remainingSec}
-                  onClick={() => {
-                    /* Move buttons just show info — player must TYPE to cast */
-                  }}
+                  onClick={() => {}}
                 />
               );
             })}
           </div>
-
-          {/* Right: Typing console + modifier */}
-          <div className="flex flex-col justify-end">
-            <ChatConsole
-              onCastSpell={onCastSpell}
-              disabled={isFinished}
-            />
-          </div>
         </div>
+      </div>
+
+      {/* ═══ ZONA C: Full-width Typing Input ═══ */}
+      <div className="glass-card rounded-2xl border border-indigo-500/20 p-4">
+        <ChatConsole
+          onCastSpell={onCastSpell}
+          disabled={isFinished}
+        />
       </div>
 
       {/* ═══ GAME OVER OVERLAY ═══ */}
